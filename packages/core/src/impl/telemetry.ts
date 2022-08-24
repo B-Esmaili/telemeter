@@ -1,55 +1,26 @@
 // export interface TelemetryDataProvider{
 
-import { TelemetryCache } from '../cache/cache';
-import { DefaultTransportOptions } from '../transport';
+import { ICache } from '../cache';
+import { EndPoint, ITransport, TransportSumitResponse } from '../transport';
+import { DefaultCache } from './cache';
+import { DefaultTransport } from './transport';
 
 // }
 const DEFAULT_CHUNK_SIZE = 20;
 
 export interface TelemetryOptions {
   endPoints: EndPoint[];
-  transport: TelemetryTransport;
+  transport?: ITransport;
   transportOptions?: Record<string, unknown>;
-  transportChunkSize: number;
-  cache: TelemetryCache;
-}
-
-export interface EndPoint {
-  url: string;
-  name: string;
-}
-
-export type TelemetrySumitResponse = { successful: boolean } | boolean;
-
-export interface TelemetryPayload<
-  TData extends Record<string, unknown> = Record<string, unknown>
-> {
-  data: TData;
-  class: string;
-}
-
-export interface TelemetryTransportOptions<
-  TOptions extends Record<string, unknown> = DefaultTransportOptions
-> {
-  payload: TelemetryPayload[];
-  options?: TOptions;
-}
-
-export interface TelemetryTransport<
-  TResponse extends TelemetrySumitResponse = boolean,
-  TOptions extends Record<string, unknown> = DefaultTransportOptions
-> {
-  submit: (
-    endpoint: EndPoint,
-    options: TelemetryTransportOptions<TOptions>
-  ) => Promise<TResponse>;
+  transportChunkSize?: number;
+  cache?: ICache;
 }
 
 class Telemetry {
   private endPoints: EndPoint[];
-  private transport: TelemetryTransport;
+  private transport: ITransport;
   private transportOptions?: Record<string, unknown>;
-  private cache: TelemetryCache;
+  private cache: ICache;
   private chunkSize: number;
 
   constructor(options: TelemetryOptions) {
@@ -60,11 +31,11 @@ class Telemetry {
       cache,
       transportChunkSize = DEFAULT_CHUNK_SIZE,
     } = options;
-    
+
     this.endPoints = endPoints;
-    this.transport = transport;
+    this.transport = transport ?? new DefaultTransport();
     this.transportOptions = transportOptions;
-    this.cache = cache;
+    this.cache = cache ?? new DefaultCache();
     this.chunkSize = transportChunkSize;
   }
 
@@ -73,12 +44,12 @@ class Telemetry {
   }
 
   private async sendImpl(options?: Record<string, unknown>) {
-    const isSuccessfull = (resp: TelemetrySumitResponse) =>
+    const isSuccessfull = (resp: TransportSumitResponse) =>
       typeof resp === 'boolean' ? resp : resp.successful;
 
     const dataChunk = this.cache.getBatch(this.chunkSize);
 
-    const aggResult: TelemetrySumitResponse[] = await Promise.all(
+    const aggResult: TransportSumitResponse[] = await Promise.all(
       this.endPoints.map((ep) =>
         this.transport.submit(ep, {
           payload: dataChunk,
